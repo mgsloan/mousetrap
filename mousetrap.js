@@ -641,6 +641,14 @@
             var maxLevel = 0;
             var processedSequenceCallback = false;
 
+            var callbackMap = self._callbacks[self._currentKeymap];
+            if (callbacks.length === 0 && callbackMap) {
+              var fallback = callbackMap['fallback'];
+              if (fallback) {
+                callbacks.push(fallback[0]);
+              }
+            }
+
             // Calculate the maxLevel for sequences so we can only execute the longest callback sequence
             for (i = 0; i < callbacks.length; ++i) {
                 if (callbacks[i].seq) {
@@ -826,9 +834,25 @@
         function _bindSingle(combination, callback, action, keymapName, sequenceName, level) {
             var keymap = keymapName ? keymapName : 'default';
 
-            // store a direct mapped reference for use with Mousetrap.trigger
+            // Initialize keymap if necessary
+            self._callbacks[keymap] = self._callbacks[keymap] || {};
             self._directMap[keymap] = self._directMap[keymap] || {};
+
+            // store a direct mapped reference for use with Mousetrap.trigger
             self._directMap[keymap][combination + ':' + action] = callback;
+
+            if (combination === 'fallback') {
+              self._callbacks[keymap]['fallback'] =
+                [{
+                  callback: callback,
+                  modifiers: [],
+                  action: action,
+                  seq: sequenceName,
+                  level: level,
+                  combo: combination
+                }];
+              return;
+            }
 
             // make sure multiple spaces in a row become a single space
             combination = combination.replace(/\s+/g, ' ');
@@ -847,7 +871,6 @@
 
             // make sure to initialize array if this is the first time
             // a callback is added for this key
-            self._callbacks[keymap] = self._callbacks[keymap] || {};
             self._callbacks[keymap][info.key] = self._callbacks[keymap][info.key] || [];
 
             // remove an existing match if there is one
