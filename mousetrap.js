@@ -478,13 +478,6 @@
         var _sequenceLevels = {};
 
         /**
-         * variable to store the setTimeout call
-         *
-         * @type {null|number}
-         */
-        var _resetTimer;
-
-        /**
          * temporary state where we will ignore the next keyup
          *
          * @type {boolean|string}
@@ -752,19 +745,6 @@
         }
 
         /**
-         * called to set a 1 second timeout on the specified sequence
-         *
-         * this is so after each key press in the sequence you have 1 second
-         * to press the next key before you have to start over
-         *
-         * @returns void
-         */
-        function _resetSequenceTimer() {
-            clearTimeout(_resetTimer);
-            _resetTimer = setTimeout(_resetSequences, 1000);
-        }
-
-        /**
          * binds a key sequence to an event
          *
          * @param {string} combo - combo specified in bind call
@@ -791,7 +771,6 @@
                 return function() {
                     _nextExpectedAction = nextAction;
                     ++_sequenceLevels[combo];
-                    _resetSequenceTimer();
                 };
             }
 
