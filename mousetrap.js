@@ -449,18 +449,25 @@
         self.target = targetElement;
 
         /**
-         * a list of all the callbacks setup via Mousetrap.bind()
+         * all the callbacks setup via Mousetrap.bind(). Outer map's keys are
+         * the keymap name.
          *
          * @type {Object}
          */
         self._callbacks = {};
 
         /**
-         * direct map of string combinations to callbacks used for trigger()
+         * direct map of string combinations to callbacks used for trigger().
+         * Outer map's keys are the keymap name.
          *
          * @type {Object}
          */
         self._directMap = {};
+
+        /**
+         * name of the currently active keymap
+         */
+        self._currentKeymap = 'default';
 
         /**
          * keeps track of what level each sequence is at since multiple
@@ -505,7 +512,7 @@
          * @param {Object} doNotReset
          * @returns void
          */
-        function _resetSequences(doNotReset) {
+        self._resetSequences = function(doNotReset) {
             doNotReset = doNotReset || {};
 
             var activeSequences = false,
@@ -531,19 +538,26 @@
          * @param {string} character
          * @param {Array} modifiers
          * @param {Event|Object} e
+         * @param {string} keymap
          * @param {string=} sequenceName - name of the sequence we are looking for
          * @param {string=} combination
          * @param {number=} level
          * @returns {Array}
          */
-        function _getMatches(character, modifiers, e, sequenceName, combination, level) {
+        function _getMatches(character, modifiers, e, keymap, sequenceName, combination, level) {
             var i;
             var callback;
             var matches = [];
             var action = e.type;
+            var callbackMap = self._callbacks[keymap];
+
+            // if the keymap doesn't exist, there are no matches
+            if (!callbackMap) {
+                return [];
+            }
 
             // if there are no events related to this keycode
-            if (!self._callbacks[character]) {
+            if (!callbackMap[character]) {
                 return [];
             }
 
@@ -554,8 +568,8 @@
 
             // loop through all callbacks for the key that was pressed
             // and see if any of them match
-            for (i = 0; i < self._callbacks[character].length; ++i) {
-                callback = self._callbacks[character][i];
+            for (i = 0; i < callbackMap[character].length; ++i) {
+                callback = callbackMap[character][i];
 
                 // if a sequence name is not specified, but this is a sequence at
                 // the wrong level then move onto the next match
@@ -586,7 +600,7 @@
                     var deleteCombo = !sequenceName && callback.combo == combination;
                     var deleteSequence = sequenceName && callback.seq == sequenceName && callback.level == level;
                     if (deleteCombo || deleteSequence) {
-                        self._callbacks[character].splice(i, 1);
+                        callbackMap[character].splice(i, 1);
                     }
 
                     matches.push(callback);
@@ -628,7 +642,7 @@
          * @returns void
          */
         self._handleKey = function(character, modifiers, e) {
-            var callbacks = _getMatches(character, modifiers, e);
+            var callbacks = _getMatches(character, modifiers, e, self._currentKeymap);
             var i;
             var doNotReset = {};
             var maxLevel = 0;
@@ -701,7 +715,7 @@
             // for the same character
             var ignoreThisKeypress = e.type == 'keypress' && _ignoreNextKeypress;
             if (e.type == _nextExpectedAction && !_isModifier(character) && !ignoreThisKeypress) {
-                _resetSequences(doNotReset);
+                self._resetSequences(doNotReset);
             }
 
             _ignoreNextKeypress = processedSequenceCallback && e.type == 'keydown';
@@ -757,9 +771,10 @@
          * @param {Array} keys
          * @param {Function} callback
          * @param {string=} action
+         * @param {string=} keymapName
          * @returns void
          */
-        function _bindSequence(combo, keys, callback, action) {
+        function _bindSequence(combo, keys, callback, action, keymapName) {
 
             // start off by adding a sequence level record for this combination
             // and setting the level to 0
@@ -799,7 +814,7 @@
 
                 // weird race condition if a sequence ends with the key
                 // another sequence begins with
-                setTimeout(_resetSequences, 10);
+                setTimeout(self._resetSequences, 10);
             }
 
             // loop through keys one at a time and bind the appropriate callback
@@ -814,7 +829,7 @@
             for (var i = 0; i < keys.length; ++i) {
                 var isFinal = i + 1 === keys.length;
                 var wrappedCallback = isFinal ? _callbackAndReset : _increaseSequence(action || _getKeyInfo(keys[i + 1]).action);
-                _bindSingle(keys[i], wrappedCallback, action, combo, i);
+                _bindSingle(keys[i], wrappedCallback, action, keymapName, combo, i);
             }
         }
 
@@ -824,14 +839,17 @@
          * @param {string} combination
          * @param {Function} callback
          * @param {string=} action
+         * @param {string=} keymapName
          * @param {string=} sequenceName - name of sequence if part of sequence
          * @param {number=} level - what part of the sequence the command is
          * @returns void
          */
-        function _bindSingle(combination, callback, action, sequenceName, level) {
+        function _bindSingle(combination, callback, action, keymapName, sequenceName, level) {
+            var keymap = keymapName ? keymapName : 'default';
 
             // store a direct mapped reference for use with Mousetrap.trigger
-            self._directMap[combination + ':' + action] = callback;
+            self._directMap[keymap] = self._directMap[keymap] || {};
+            self._directMap[keymap][combination + ':' + action] = callback;
 
             // make sure multiple spaces in a row become a single space
             combination = combination.replace(/\s+/g, ' ');
@@ -842,7 +860,7 @@
             // if this pattern is a sequence of keys then run through this method
             // to reprocess each pattern one key at a time
             if (sequence.length > 1) {
-                _bindSequence(combination, sequence, callback, action);
+                _bindSequence(combination, sequence, callback, action, keymapName);
                 return;
             }
 
@@ -850,10 +868,11 @@
 
             // make sure to initialize array if this is the first time
             // a callback is added for this key
-            self._callbacks[info.key] = self._callbacks[info.key] || [];
+            self._callbacks[keymap] = self._callbacks[keymap] || {};
+            self._callbacks[keymap][info.key] = self._callbacks[keymap][info.key] || [];
 
             // remove an existing match if there is one
-            _getMatches(info.key, info.modifiers, {type: info.action}, sequenceName, combination, level);
+            _getMatches(info.key, info.modifiers, {type: info.action}, keymap, sequenceName, combination, level);
 
             // add this call back to the array
             // if it is a sequence put it at the beginning
@@ -861,7 +880,7 @@
             //
             // this is important because the way these are processed expects
             // the sequence ones to come first
-            self._callbacks[info.key][sequenceName ? 'unshift' : 'push']({
+            self._callbacks[keymap][info.key][sequenceName ? 'unshift' : 'push']({
                 callback: callback,
                 modifiers: info.modifiers,
                 action: info.action,
@@ -877,11 +896,12 @@
          * @param {Array} combinations
          * @param {Function} callback
          * @param {string|undefined} action
+         * @param {string=} keymapName
          * @returns void
          */
-        self._bindMultiple = function(combinations, callback, action) {
+        self._bindMultiple = function(combinations, callback, action, keymapName) {
             for (var i = 0; i < combinations.length; ++i) {
-                _bindSingle(combinations[i], callback, action);
+                _bindSingle(combinations[i], callback, action, keymapName);
             }
         };
 
@@ -903,12 +923,13 @@
      * @param {string|Array} keys
      * @param {Function} callback
      * @param {string=} action - 'keypress', 'keydown', or 'keyup'
+     * @param {string=} keymapName
      * @returns void
      */
-    Mousetrap.prototype.bind = function(keys, callback, action) {
+    Mousetrap.prototype.bind = function(keys, callback, action, keymapName) {
         var self = this;
         keys = keys instanceof Array ? keys : [keys];
-        self._bindMultiple.call(self, keys, callback, action);
+        self._bindMultiple.call(self, keys, callback, action, keymapName);
         return self;
     };
 
@@ -927,11 +948,12 @@
      *
      * @param {string|Array} keys
      * @param {string} action
+     * @param {string=} keymapName
      * @returns void
      */
-    Mousetrap.prototype.unbind = function(keys, action) {
+    Mousetrap.prototype.unbind = function(keys, action, keymapName) {
         var self = this;
-        return self.bind.call(self, keys, function() {}, action);
+        return self.bind.call(self, keys, function() {}, action, keymapName);
     };
 
     /**
@@ -939,12 +961,14 @@
      *
      * @param {string} keys
      * @param {string=} action
+     * @param {string=} keyMapName
      * @returns void
      */
-    Mousetrap.prototype.trigger = function(keys, action) {
+    Mousetrap.prototype.trigger = function(keys, action, keymapName) {
         var self = this;
-        if (self._directMap[keys + ':' + action]) {
-            self._directMap[keys + ':' + action]({}, keys);
+        var keymap = keymapName ? keymapName : 'default';
+        if (self._directMap[keymap][keys + ':' + action]) {
+            self._directMap[keymap][keys + ':' + action]({}, keys);
         }
         return self;
     };
@@ -954,13 +978,32 @@
      * if you want to clear out the current keyboard shortcuts and bind
      * new ones - for example if you switch to another page
      *
+     * If a keymap is specified, then only resets that keymap.
+     *
+     * @param {string=} keymapName
      * @returns void
      */
-    Mousetrap.prototype.reset = function() {
+    Mousetrap.prototype.reset = function(keymapName) {
         var self = this;
-        self._callbacks = {};
-        self._directMap = {};
+        if (keymapName) {
+          self._callbacks[keymapName] = {};
+          self._directMap[keymapName] = {};
+        } else {
+          self._callbacks = {};
+          self._directMap = {};
+        }
         return self;
+    };
+
+    /**
+     * switches the current keymap. use 'default' to switch to the main keymap.
+     */
+    Mousetrap.prototype.switchKeymap = function(keymapName) {
+        var self = this;
+        if (keymapName && keymapName !== self._currentKeymap) {
+            self._resetSequences();
+            self._currentKeymap = keymapName;
+        }
     };
 
     /**
