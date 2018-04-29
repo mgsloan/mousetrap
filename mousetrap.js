@@ -1028,27 +1028,6 @@
         _REVERSE_MAP = null;
     };
 
-    /**
-     * Init the global mousetrap functions
-     *
-     * This method is needed to allow the global mousetrap functions to work
-     * now that mousetrap is a constructor function.
-     */
-    Mousetrap.init = function() {
-        var documentMousetrap = Mousetrap(document);
-        for (var method in documentMousetrap) {
-            if (method.charAt(0) !== '_') {
-                Mousetrap[method] = (function(method) {
-                    return function() {
-                        return documentMousetrap[method].apply(documentMousetrap, arguments);
-                    };
-                } (method));
-            }
-        }
-    };
-
-    Mousetrap.init();
-
     // expose mousetrap to the global object
     window.Mousetrap = Mousetrap;
 
