@@ -173,6 +173,7 @@
      * @param {Function} callback
      * @returns void
      */
+    /*
     function _addEvent(object, type, callback) {
         if (object.addEventListener) {
             object.addEventListener(type, callback, false);
@@ -181,6 +182,7 @@
 
         object.attachEvent('on' + type, callback);
     }
+    */
 
     /**
      * takes the event and returns the key character
@@ -728,7 +730,7 @@
          * @param {Event} e
          * @returns void
          */
-        function _handleKeyEvent(e) {
+        self._handleKeyEvent = function(e) {
 
             // normalize e.which for key events
             // @see http://stackoverflow.com/questions/4285627/javascript-keycode-vs-charcode-utter-confusion
@@ -908,9 +910,15 @@
         };
 
         // start!
+        /*
         _addEvent(targetElement, 'keypress', _handleKeyEvent);
         _addEvent(targetElement, 'keydown', _handleKeyEvent);
         _addEvent(targetElement, 'keyup', _handleKeyEvent);
+        */
+    }
+
+    Mousetrap.prototype.handleKeyEvent = function(e) {
+      return this._handleKeyEvent(e);
     }
 
     /**
