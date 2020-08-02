@@ -290,6 +290,11 @@
      * @returns void
      */
     function _stopPropagation(e) {
+        if (e.stopImmediatePropagation) {
+            e.stopImmediatePropagation();
+            return;
+        }
+
         if (e.stopPropagation) {
             e.stopPropagation();
             return;
